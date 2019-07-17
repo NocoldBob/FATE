@@ -45,7 +45,8 @@ def generate_publish_model_info(config_data):
             table_config = copy.deepcopy(default_table_config)
             table_config['local'] = {'role': role_name, 'party_id': _party_id}
             table_config.update(role_party_model_config)
-            table_config['table_name'] = table_config['table_name'] if table_config.get('table_name') else models_version
+            table_config['namespace'] = role_party_model_config.get('model_id', '')
+            table_config['table_name'] = table_config['model_version'] if table_config.get('model_version') else models_version
             model_version, model_id = dtable_utils.get_table_info(config=table_config)
             config_data['model'][role_name][_party_id]['model_version'] = model_version
             config_data['model'][role_name][_party_id]['model_id'] = model_id
@@ -54,6 +55,7 @@ def generate_publish_model_info(config_data):
 
 def load_model(config_data):
     stat_logger.info(config_data)
+    success = True
     for serving in config_data.get('servings'):
         with grpc.insecure_channel(serving) as channel:
             stub = model_service_pb2_grpc.ModelServiceStub(channel)
@@ -68,15 +70,18 @@ def load_model(config_data):
             stat_logger.info('request serving: {} load model'.format(serving))
             load_model_request.local.role = config_data.get('local').get('role')
             load_model_request.local.partyId = config_data.get('local').get('party_id')
-            print(load_model_request)
             stat_logger.info(load_model_request)
             response = stub.publishLoad(load_model_request)
             stat_logger.info('{} {} load model status: {}'.format(load_model_request.local.role, load_model_request.local.partyId, response.statusCode))
+            if response.statusCode != 0:
+                success = False
+    return success
 
 
 def publish_online(config_data):
     _role = config_data.get('local').get('role')
     _party_id = config_data.get('local').get('party_id')
+    success = True
     for serving in config_data.get('servings'):
         with grpc.insecure_channel(serving) as channel:
             stub = model_service_pb2_grpc.ModelServiceStub(channel)
@@ -93,6 +98,8 @@ def publish_online(config_data):
                     table_config['role'] = config_data.get('role')
                     table_config['data_type'] = 'model'
                     table_config['gen_table_info'] = True
+                    table_config['namespace'] = table_config.get('model_id', '')
+                    table_config['table_name'] = table_config.get('model_version', '')
                     table_name, namespace = dtable_utils.get_table_info(config=table_config)
                     publish_model_request.model[_role].roleModelInfo[_party_id].tableName = table_name
                     publish_model_request.model[_role].roleModelInfo[_party_id].namespace = namespace
@@ -101,3 +108,6 @@ def publish_online(config_data):
             stat_logger.info(publish_model_request)
             response = stub.publishOnline(publish_model_request)
             stat_logger.info(response)
+            if response.statusCode != 0:
+                success = False
+    return success

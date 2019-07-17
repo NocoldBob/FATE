@@ -34,7 +34,8 @@ def federated_api(job_id, method, url, src_party_id, dest_party_id, json_body={}
         _return = stub.unaryCall(_packet)
         stat_logger.info("grpc unary response: {}".format(_return))
         channel.close()
-        return 0, _return.body.value
+        json_body = json.loads(_return.body.value)
+        return json_body.get('retcode', 103), _return.body.value
     except grpc.RpcError as e:
         stat_logger.exception(e)
         return 101, 'rpc error'

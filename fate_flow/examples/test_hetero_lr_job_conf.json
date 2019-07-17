@@ -4,7 +4,7 @@
         "party_id": 10000
     },
     "job_parameters": {
-        "model_id": "online_inference_hetero_lr_test"
+        "model_key": "online_inference_hetero_lr_test"
     },
     "role": {
         "guest": [10000],

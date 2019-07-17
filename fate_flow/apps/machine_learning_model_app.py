@@ -38,9 +38,13 @@ def load_model():
     status = publish_model.generate_publish_model_info(request_config)
     if not status:
         return get_json_result(retcode=101, retmsg='can not found model')
+    load_status = True
+    load_status_info = {}
+    load_status_msg = 'success'
     for role_name, role_partys in request_config.get("role").items():
         if role_name == 'arbiter':
             continue
+        load_status_info[role_name] = load_status_info.get(role_name, {})
         for _party_id in role_partys:
             request_config['local'] = {'role': role_name, 'party_id': _party_id}
             st, msg = federated_api(job_id=_job_id,
@@ -49,15 +53,19 @@ def load_model():
                                     src_party_id=initiator_party_id,
                                     dest_party_id=_party_id,
                                     json_body=request_config)
-    return get_json_result(job_id=_job_id)
+            if st != 0:
+                load_status = False
+                load_status_msg = 'failed'
+            load_status_info[role_name][_party_id] = st
+    return get_json_result(job_id=_job_id, retcode=(0 if load_status else 101), retmsg=load_status_msg, data=load_status_info)
 
 
 @manager.route('/load/do', methods=['POST'])
 def do_load_model():
     request_data = request.json
     request_data["servings"] = SERVINGS
-    publish_model.load_model(config_data=request_data)
-    return get_json_result()
+    load_status = publish_model.load_model(config_data=request_data)
+    return get_json_result(retcode=(0 if load_status else 101))
 
 
 @manager.route('/online', methods=['POST'])
@@ -66,8 +74,8 @@ def publish_model_online():
     if not request_config.get('servings'):
         # get my party all servings
         request_config['servings'] = SERVINGS
-    publish_model.publish_online(config_data=request_config)
-    return get_json_result()
+    online_status = publish_model.publish_online(config_data=request_config)
+    return get_json_result(retcode=(0 if online_status else 101))
 
 
 @manager.route('/version', methods=['POST'])
