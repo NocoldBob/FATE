@@ -20,8 +20,8 @@
         "data": {
           "train_data": [
             {
-              "name": "090ff6089cb111e9bddf5254005e961b",
-              "namespace": "guest#10000#arbiter-10000#guest-10000#host-10000#train_input"
+              "name": "1ca0d9eea77e11e9a84f5254005e961b",
+              "namespace": "arbiter-10000#guest-10000#host-10000#train_input#guest#10000"
             }
           ]
         }
@@ -46,8 +46,8 @@
         "data": {
           "train_data": [
             {
-              "name": "090ff6089cb111e9bddf5254005e961b",
-              "namespace": "guest#10000#arbiter-10000#guest-10000#host-10000#train_input"
+              "name": "3de22bdaa77e11e99c5d5254005e961b",
+              "namespace": "arbiter-10000#guest-10000#host-10000#train_input#host#10000"
             }
           ]
         }
@@ -86,7 +86,7 @@
         "eps": 1e-6
       },
       "iv_value_param": {
-        "value_threshold": 0.2
+        "value_threshold": 1.0
       },
       "iv_percentile_param": {
         "percentile_threshold": 0.9
@@ -115,7 +115,7 @@
         "n_splits": 5,
         "shuffle": false,
         "random_seed": 103,
-        "need_cv": true,
+        "need_cv": false,
         "evaluate_param": {
           "metrics": [
             "auc",

@@ -21,7 +21,6 @@ from arch.api.utils import log_utils
 from fate_flow.entity.metric import MetricMeta, Metric
 from federatedml.logistic_regression.hetero_logistic_regression.hetero_lr_base import HeteroLRBase
 from federatedml.optim.federated_aggregator import HeteroFederatedAggregator
-from federatedml.util.transfer_variable.hetero_lr_transfer_variable import HeteroLRTransferVariable
 from federatedml.util import consts
 
 LOGGER = log_utils.getLogger()
@@ -35,7 +34,6 @@ class HeteroLRArbiter(HeteroLRBase):
         # attribute
         self.pre_loss = None
         self.batch_num = None
-        self.transfer_variable = HeteroLRTransferVariable()
 
     def perform_subtasks(self, **training_info):
         """
@@ -179,13 +177,13 @@ class HeteroLRArbiter(HeteroLRBase):
             metric_meta = MetricMeta(name='train',
                                      metric_type="LOSS",
                                      extra_metas={
-                                         "unit_name": "hetero_lr"
+                                         "unit_name": "iters"
                                      })
             metric_name = 'loss_' + self.flowid
             self.callback_meta(metric_name=metric_name, metric_namespace='train', metric_meta=metric_meta)
             self.callback_metric(metric_name=metric_name,
                                  metric_namespace='train',
-                                 metric_data=[Metric(self.n_iter_, loss)])
+                                 metric_data=[Metric(self.n_iter_, float(loss))])
             if self.converge_func.is_converge(loss):
                 is_stop = True
 

@@ -179,6 +179,7 @@ class KFold(BaseCrossValidator):
         LOGGER.debug("In KFold, evaluate_param is: {}".format(self.evaluate_param.__dict__))
         eval_obj._init_model(self.evaluate_param)
         eval_obj.set_tracker(model.tracker)
+        LOGGER.debug("Evaluate_data is : {}".format(eval_data.first()))
         eval_data = {fold_name: eval_data}
         eval_obj.fit(eval_data)
         eval_obj.save_data()

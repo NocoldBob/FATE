@@ -22,7 +22,6 @@ from federatedml.logistic_regression.hetero_logistic_regression.hetero_lr_base i
 from federatedml.optim.gradient import HeteroLogisticGradient
 from federatedml.secureprotol import EncryptModeCalculator
 from federatedml.util import consts
-from federatedml.util.transfer_variable.hetero_lr_transfer_variable import HeteroLRTransferVariable
 
 LOGGER = log_utils.getLogger()
 
@@ -30,7 +29,6 @@ LOGGER = log_utils.getLogger()
 class HeteroLRHost(HeteroLRBase):
     def __init__(self):
         super(HeteroLRHost, self).__init__()
-        self.transfer_variable = HeteroLRTransferVariable()
         self.batch_num = None
         self.batch_index_list = []
 

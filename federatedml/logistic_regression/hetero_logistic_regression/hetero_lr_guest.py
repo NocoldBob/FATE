@@ -24,7 +24,6 @@ from federatedml.optim import activation
 from federatedml.optim.gradient import HeteroLogisticGradient
 from federatedml.secureprotol import EncryptModeCalculator
 from federatedml.util import consts
-from federatedml.util.transfer_variable.hetero_lr_transfer_variable import HeteroLRTransferVariable
 
 LOGGER = log_utils.getLogger()
 
@@ -32,7 +31,6 @@ LOGGER = log_utils.getLogger()
 class HeteroLRGuest(HeteroLRBase):
     def __init__(self):
         super().__init__()
-        self.transfer_variable = HeteroLRTransferVariable()
         self.data_batch_count = []
         self.wx = None
         self.guest_forward = None
@@ -290,7 +288,8 @@ class HeteroLRGuest(HeteroLRBase):
         LOGGER.info("Start predict ...")
 
         data_features = self.transform(data_instances)
-        LOGGER.debug("data count: {}, coef_: {}, intercept_: {}".format(data_features.count(), self.coef_, self.intercept_))
+        LOGGER.debug(
+            "data count: {}, coef_: {}, intercept_: {}".format(data_features.count(), self.coef_, self.intercept_))
         prob_guest = self.compute_wx(data_features, self.coef_, self.intercept_)
         prob_host = federation.get(name=self.transfer_variable.host_prob.name,
                                    tag=self.transfer_variable.generate_transferid(
@@ -301,11 +300,10 @@ class HeteroLRGuest(HeteroLRBase):
         # guest probability
         pred_prob = prob_guest.join(prob_host, lambda g, h: activation.sigmoid(g + h))
         pred_label = self.classified(pred_prob, self.predict_param.threshold)
-        if self.predict_param.with_proba:
-            labels = data_instances.mapValues(lambda v: v.label)
-            predict_result = labels.join(pred_prob, lambda label, prob: [label, prob])
-        else:
-            predict_result = data_instances.mapValues(lambda v: [v.label, None])
 
-        predict_result = predict_result.join(pred_label, lambda r, p: [r[0], r[1], p])
+        predict_result = data_instances.mapValues(lambda x: x.label)
+        predict_result = predict_result.join(pred_prob, lambda x, y: (x, y))
+        predict_result = predict_result.join(pred_label, lambda x, y: [x[0], y, x[1], {"0": (1 - x[1]), "1": x[1]}])
+        self.data_output = predict_result
+
         return predict_result

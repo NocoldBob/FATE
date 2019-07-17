@@ -186,7 +186,8 @@ class BaseHeteroFeatureSelection(ModelBase):
 
         new_data = data_instances.mapValues(f)
         new_header = self._reset_header()
-        new_data.schema['header'] = new_header
+        # new_data.schema['header'] = new_header
+        new_data = self.set_schema(new_data, new_header)
         return new_data
 
     def _abnormal_detection(self, data_instances):
@@ -211,11 +212,14 @@ class BaseHeteroFeatureSelection(ModelBase):
         """
         As for all columns including those not specified in user params, record which columns left.
         """
+        left_col_list = []
         for col_idx, is_left in new_left_cols.items():
             if not is_left:
                 self.left_cols[col_idx] = False
             elif is_left:
+                left_col_list.append(col_idx)
                 self.left_cols[col_idx] = True
+        self.cols = left_col_list
 
     def _init_cols(self, data_instances):
         header = get_header(data_instances)
@@ -253,4 +257,12 @@ class BaseHeteroFeatureSelection(ModelBase):
                 self.left_cols[col_name] = True
             else:
                 self.left_cols[col_name] = False
+
+    def set_schema(self, data_instance, header=None):
+        if header is None:
+            data_instance.schema["header"] = self.header
+        else:
+            data_instance.schema["header"] = header
+        return data_instance
+
 

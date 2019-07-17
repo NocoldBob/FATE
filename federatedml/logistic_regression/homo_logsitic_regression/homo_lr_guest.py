@@ -156,7 +156,6 @@ class HomoLRGuest(HomoLRBase):
         # self.show_model()
         LOGGER.debug("in fit self coef: {}".format(self.coef_))
         data_instances.schema['header'] = self.header
-        self.data_output = data_instances
         return data_instances
 
     def __init_parameters(self):
@@ -200,13 +199,10 @@ class HomoLRGuest(HomoLRBase):
         pred_prob = wx.mapValues(lambda x: activation.sigmoid(x))
         pred_label = self.classified(pred_prob, self.predict_param.threshold)
 
-        if self.predict_param.with_proba:
-            predict_result = data_instances.mapValues(lambda x: x.label)
-            predict_result = predict_result.join(pred_prob, lambda x, y: (x, y))
-        else:
-            predict_result = data_instances.mapValues(lambda x: (x.label, None))
-
-        predict_result = predict_result.join(pred_label, lambda x, y: [x[0], x[1], y])
+        predict_result = data_instances.mapValues(lambda x: x.label)
+        predict_result = predict_result.join(pred_prob, lambda x, y: (x, y))
+        predict_result = predict_result.join(pred_label, lambda x, y: [x[0], y, x[1], {"1": x[1], "0": (1 - x[1])}])
+        self.data_output = predict_result
         return predict_result
 
     def set_flowid(self, flowid=0):

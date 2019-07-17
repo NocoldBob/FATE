@@ -93,6 +93,7 @@ class BaseLogisticRegression(ModelBase):
         self.re_encrypt_batches = params.re_encrypt_batches
         self.predict_param = params.predict_param
         self.optimizer = Optimizer(params.learning_rate, params.optimizer)
+        self.key_length = params.encrypt_param.key_length
 
     def set_feature_shape(self, feature_shape):
         self.feature_shape = feature_shape

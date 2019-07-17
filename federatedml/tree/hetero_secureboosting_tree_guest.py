@@ -406,7 +406,7 @@ class HeteroSecureBoostingTreeGuest(BoostingTree):
                 predict_result = data_inst.join(predicts, lambda inst, pred: [inst.label, classes_[1] if pred > threshold else classes_[0], pred, {"0": 1 - pred, "1": pred}])
             else:
                 predict_label = predicts.mapValues(lambda preds: classes_[np.argmax(preds)])
-                predict_result = data_inst.join(predicts, lambda inst, preds: [inst.label, classes_[np.argmax(preds)], np.argmax(preds), dict(map(str, classes_), preds)])
+                predict_result = data_inst.join(predicts, lambda inst, preds: [inst.label, classes_[np.argmax(preds)], np.max(preds), dict(zip(map(str, classes_), preds))])
         
         elif self.task_type == consts.REGRESSION:
             predict_result = data_inst.join(predicts, lambda inst, pred: [inst.label, float(pred), float(pred), {"label": float(pred)}])

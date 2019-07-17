@@ -120,24 +120,7 @@ class BaseHeteroFeatureBinning(ModelBase):
         iv_attrs = {}
         for col_name, iv_attr in binning_result.items():
             iv_result = iv_attr.result_dict()
-            LOGGER.debug("in _get_param, iv_result is : {}".format(iv_result))
             iv_object = feature_binning_param_pb2.IVParam(**iv_result)
-
-            json_result = json_format.MessageToJson(iv_object)
-            LOGGER.debug("iv_object: {}".format(json_result))
-
-            iv_object_test = feature_binning_param_pb2.IVParam()
-            json_result = json_format.MessageToJson(iv_object_test)
-            LOGGER.debug("iv_object_test_1: {}".format(json_result))
-
-            iv_object_test = feature_binning_param_pb2.IVParam(is_woe_monotonic=False)
-            json_result = json_format.MessageToDict(iv_object_test)
-            LOGGER.debug("iv_object_test_2: {}".format(json_result))
-
-            iv_object_test = feature_binning_param_pb2.IVParam(is_woe_monotonic=True)
-            json_result = json_format.MessageToDict(iv_object_test, including_default_value_fields=True)
-            LOGGER.debug("iv_object_test_3: {}".format(json_result))
-
             iv_attrs[col_name] = iv_object
         binning_result_obj = feature_binning_param_pb2.FeatureBinningResult(binning_result=iv_attrs)
 
@@ -179,9 +162,9 @@ class BaseHeteroFeatureBinning(ModelBase):
                 iv_attr.reconstruct(iv_attr_obj)
                 host_result_obj[col_name] = iv_attr
             self.host_results[host_name] = host_result_obj
-        LOGGER.debug("In feature binning load model, self.binning_result: {}, cols: {}, host_results: {}".format(
-            self.binning_result, self.cols, self.host_results
-        ))
+        # LOGGER.debug("In feature binning load model, self.binning_result: {}, cols: {}, host_results: {}".format(
+        #     self.binning_result, self.cols, self.host_results
+        # ))
 
     def export_model(self):
         meta_obj = self._get_meta()
@@ -230,7 +213,7 @@ class BaseHeteroFeatureBinning(ModelBase):
             self.cols_dict[col] = col_index
 
     def set_schema(self, data_instance):
-        data_instance.schema = {"header": self.header}
+        data_instance.schema["header"] = self.header
 
     def _abnormal_detection(self, data_instances):
         """

@@ -40,7 +40,7 @@ class HeteroFeatureSelectionGuest(BaseHeteroFeatureSelection):
 
         for method in self.filter_methods:
             self.filter_one_method(data_instances, method)
-            print("After method: {}, left_cols: {}".format(method, self.left_cols))
+            LOGGER.debug("After method: {}, left_cols: {}".format(method, self.left_cols))
             # self._renew_left_col_names()
 
         new_data = self._transfer_data(data_instances)
@@ -54,8 +54,6 @@ class HeteroFeatureSelectionGuest(BaseHeteroFeatureSelection):
             self.left_cols
         ))
         new_data = self._transfer_data(data_instances)
-        self._reset_header()
-        new_data.schema['header'] = self.header
 
         return new_data
 

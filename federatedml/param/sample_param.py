@@ -34,12 +34,13 @@ class SampleParam(BaseParam):
     random_state: int, RandomState instance or None, default: None
     """
 
-    def __init__(self, mode="random", method="downsample", fractions=None, random_state=None, task_type="hetero"):
+    def __init__(self, mode="random", method="downsample", fractions=None, random_state=None, task_type="hetero", need_run=True):
         self.mode = mode
         self.method = method
         self.fractions = fractions
         self.random_state = random_state
         self.task_type = task_type
+        self.need_run = need_run
 
     def check(self):
         descr = "sample param"

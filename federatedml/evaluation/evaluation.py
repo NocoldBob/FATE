@@ -33,7 +33,6 @@ from sklearn.metrics import roc_curve
 
 from arch.api.utils import log_utils
 from fate_flow.entity.metric import Metric, MetricMeta
-from fate_flow.manager.tracking import Tracking
 from fate_flow.storage.fate_storage import FateStorage
 
 from federatedml.param import EvaluateParam
@@ -48,24 +47,6 @@ class Evaluation(ModelBase):
         super().__init__()
         self.model_param = EvaluateParam()
         self.eval_results = {}
-
-        self.eval_func = {
-            consts.AUC: self.auc,
-            consts.KS: self.ks,
-            consts.LIFT: self.lift,
-            consts.PRECISION: self.precision,
-            consts.RECALL: self.recall,
-            consts.ACCURACY: self.accuracy,
-            consts.EXPLAINED_VARIANCE: self.explained_variance,
-            consts.MEAN_ABSOLUTE_ERROR: self.mean_absolute_error,
-            consts.MEAN_SQUARED_ERROR: self.mean_squared_error,
-            consts.MEAN_SQUARED_LOG_ERROR: self.mean_squared_log_error,
-            consts.MEDIAN_ABSOLUTE_ERROR: self.median_absolute_error,
-            consts.R2_SCORE: self.r2_score,
-            consts.ROOT_MEAN_SQUARED_ERROR: self.root_mean_squared_error,
-            consts.ROC: self.roc,
-            consts.GAIN: self.gain
-        }
 
         self.save_single_value_metric_list = [consts.AUC,
                                               consts.EXPLAINED_VARIANCE,
@@ -89,14 +70,13 @@ class Evaluation(ModelBase):
         ]
 
         FateStorage.init_storage()
-        # self.tracker = Tracking('123456', 'hetero_lr')
 
     def _init_model(self, model):
         self.model_param = model
         self.eval_type = self.model_param.eval_type
-        self.thresholds = self.model_param.thresholds
         self.metrics = self.model_param.metrics
         self.pos_label = self.model_param.pos_label
+        self.filter_point_num = 1000
 
     def _run_data(self, data_sets=None, stage=None):
         data = {}
@@ -140,8 +120,8 @@ class Evaluation(ModelBase):
 
             data_type = key
             mode = "eval"
-            if len(eval_data_local[0][1]) >= 3:
-                mode = eval_data_local[0][1][3]
+            if len(eval_data_local[0][1]) >= 4:
+                mode = eval_data_local[0][1][4]
 
             for d in eval_data_local:
                 labels.append(d[1][0])
@@ -171,16 +151,19 @@ class Evaluation(ModelBase):
                     eval_result[eval_metric].append(mode)
                     eval_result[eval_metric].append(res)
 
-            if 'auc' in eval_result:
-                LOGGER.info("Model auc: {}".format(eval_result['auc']))
-            for eval_key in eval_result:
-                LOGGER.debug("Evaluate result {} exist".format(eval_key))
             self.eval_results[data_type] = eval_result
-
-        # LOGGER.debug("Evaluation Result: {}".format(self.eval_results))
 
     def __save_single_value(self, result, metric_name, metric_namespace, eval_name):
         self.tracker.log_metric_data(metric_namespace, metric_name, [Metric(eval_name, result)])
+
+    def __filter(self, x_list, filter_num):
+        x_size = len(x_list)
+        index = [i for i in range(x_size)]
+        if x_size > filter_num:
+            np.random.shuffle(index)
+            index = index[:filter_num]
+
+        return index
 
     def __save_curve_data(self, x_axis_list, y_axis_list, metric_name, metric_namespace):
         points = []
@@ -190,12 +173,18 @@ class Evaluation(ModelBase):
 
         metric_points = [Metric(point[0], point[1]) for point in points]
         self.tracker.log_metric_data(metric_namespace, metric_name, metric_points)
+        LOGGER.debug(
+            "read metric data, metric_namespace:{}, metric_name:{}, metric:{}".format(metric_namespace, metric_name,
+                                                                                      self.tracker.read_metric_data(
+                                                                                          metric_namespace,
+                                                                                          metric_name)))
 
     def __save_curve_meta(self, metric_name, metric_namespace, metric_type, unit_name=None, ordinate_name=None,
-                          curve_name=None, best=None):
+                          curve_name=None, best=None, pair_type=None):
         extra_metas = {}
-        key_list = ["unit_name", "unit_name", "ordinate_name", "best"]
         metric_type = "_".join([metric_type, "EVALUATION"])
+
+        key_list = ["unit_name", "ordinate_name", "curve_name", "best", "pair_type"]
         for key in key_list:
             value = locals()[key]
             if value:
@@ -213,27 +202,42 @@ class Evaluation(ModelBase):
 
                 if metric in self.save_single_value_metric_list:
                     self.__save_single_value(metric_res[1], metric_name, metric_namespace, metric)
-                elif metric == consts.KS or metric == consts.ROC:
+                elif metric in [consts.KS, consts.ROC]:
                     if metric == consts.KS:
                         fpr, tpr, thresholds = metric_res[1][1:]
                     else:
                         fpr, tpr, thresholds = metric_res[1]
 
+                    index = self.__filter(thresholds, self.filter_point_num)
+                    thresholds = [thresholds[i] for i in index]
+                    fpr = [fpr[i] for i in index]
+                    tpr = [tpr[i] for i in index]
+
                     metric_name_fpr = '_'.join([metric_name, "fpr"])
                     self.__save_curve_data(thresholds, fpr, metric_name_fpr, metric_namespace)
-                    self.__save_curve_meta(metric_name_fpr, metric_namespace, metric.upper(), unit_name="threshold",
-                                           curve_name=metric_name_fpr)
+                    self.__save_curve_meta(metric_name=metric_name_fpr, metric_namespace=metric_namespace,
+                                           metric_type=metric.upper(), unit_name="threshold",
+                                           curve_name=metric_name_fpr, pair_type=data_type)
 
                     metric_name_tpr = '_'.join([metric_name, "tpr"])
                     self.__save_curve_data(thresholds, tpr, metric_name_tpr, metric_namespace)
                     self.__save_curve_meta(metric_name_tpr, metric_namespace, metric.upper(), unit_name="threshold",
-                                           curve_name=metric_name_tpr)
+                                           curve_name=metric_name_tpr, pair_type=data_type)
 
                 elif metric in [consts.ACCURACY, consts.LIFT, consts.GAIN]:
                     score, thresholds = metric_res[1]
+
+                    if metric in [consts.LIFT, consts.GAIN]:
+                        score = [s[1] for s in score]
+
+                    index = self.__filter(thresholds, self.filter_point_num)
+                    thresholds = [thresholds[i] for i in index]
+                    score = [score[i] for i in index]
+
                     self.__save_curve_data(thresholds, score, metric_name, metric_namespace)
-                    self.__save_curve_meta(metric_name, metric_namespace, metric.upper(), unit_name="threshold",
-                                           curve_name=metric_name)
+                    self.__save_curve_meta(metric_name=metric_name, metric_namespace=metric_namespace,
+                                           metric_type=metric.upper(), unit_name="threshold",
+                                           curve_name=data_type)
                 elif metric in [consts.PRECISION, consts.RECALL]:
                     precision_recall[metric] = metric_res
                     if len(precision_recall) < 2:
@@ -243,21 +247,37 @@ class Evaluation(ModelBase):
                     recall_res = precision_recall.get(consts.RECALL)
 
                     if precision_res[0] != recall_res[0]:
-                        raise ValueError(
+                        LOGGER.warning(
                             "precision mode:{} is not equal to recall mode:{}".format(precision_res[0], recall_res[0]))
-                    metric_namespace = precision_res[0]
+                        continue
 
+                    metric_namespace = precision_res[0]
                     metric_name_precision = '_'.join([data_type, "precision"])
-                    self.__save_curve_data(precision_res[1][1], precision_res[1][0], metric_name_precision,
+
+                    precision_thresholds = precision_res[1][1]
+
+                    # filter if the number of precision is lager than self.filter_point_num
+                    index = self.__filter(precision_thresholds, self.filter_point_num)
+                    precision_thresholds = [precision_thresholds[i] for i in index]
+                    pos_precision_score = [score[1] for score in precision_res[1][0]]
+                    pos_precision_score = [pos_precision_score[i] for i in index]
+
+                    self.__save_curve_data(precision_thresholds, pos_precision_score, metric_name_precision,
                                            metric_namespace)
                     self.__save_curve_meta(metric_name_precision, metric_namespace, consts.PRECISION.upper(),
-                                           unit_name="threshold")
+                                           unit_name="threshold", ordinate_name="Precision", curve_name=data_type,
+                                           pair_type=data_type)
 
+                    recall_thresholds = recall_res[1][1]
+                    recall_thresholds = [recall_thresholds[i] for i in index]
+                    pos_recall_score = [score[1] for score in recall_res[1][0]]
+                    pos_recall_score = [pos_recall_score[i] for i in index]
                     metric_name_recall = '_'.join([data_type, "recall"])
-                    self.__save_curve_data(recall_res[1][1], recall_res[1][0], metric_name_recall,
+                    self.__save_curve_data(recall_thresholds, pos_recall_score, metric_name_recall,
                                            metric_namespace)
                     self.__save_curve_meta(metric_name_recall, metric_namespace, consts.RECALL.upper(),
-                                           unit_name="threshold")
+                                           unit_name="threshold", ordinate_name="Recall", curve_name=data_type,
+                                           pair_type=data_type)
                 else:
                     LOGGER.warning("Unknown metric:{}".format(metric))
 
@@ -428,9 +448,6 @@ class Evaluation(ModelBase):
         float
             The lift
         """
-        if thresholds is None:
-            thresholds = self.thresholds
-
         if thresholds is None and self.eval_type == consts.BINARY:
             thresholds = list(set(pred_scores))
             thresholds.sort()
@@ -456,9 +473,6 @@ class Evaluation(ModelBase):
         float
             The gain
         """
-        if thresholds is None:
-            thresholds = self.thresholds
-
         if thresholds is None and self.eval_type == consts.BINARY:
             thresholds = list(set(pred_scores))
             thresholds.sort()
@@ -485,9 +499,6 @@ class Evaluation(ModelBase):
         dict
             The key is threshold and the value is another dic, which key is label in parameter labels, and value is the label's precision.
         """
-        if thresholds is None:
-            thresholds = self.thresholds
-
         if thresholds is None and self.eval_type == consts.BINARY:
             thresholds = list(set(pred_scores))
             thresholds.sort()
@@ -497,7 +508,7 @@ class Evaluation(ModelBase):
             return precision_operator.compute(labels, pred_scores, thresholds)
         elif self.eval_type == consts.MULTY:
             precision_operator = MultiClassPrecision()
-            return precision_operator.compute(labels, pred_scores, result_filter)
+            return precision_operator.compute(labels, pred_scores)
         else:
             logging.warning("error:can not find classification type:{}".format(self.eval_type))
 
@@ -516,9 +527,6 @@ class Evaluation(ModelBase):
         dict
             The key is threshold and the value is another dic, which key is label in parameter labels, and value is the label's recall.
         """
-        if thresholds is None:
-            thresholds = self.thresholds
-
         if thresholds is None and self.eval_type == consts.BINARY:
             thresholds = list(set(pred_scores))
             thresholds.sort()
@@ -528,7 +536,7 @@ class Evaluation(ModelBase):
             return precision_operator.compute(labels, pred_scores, thresholds)
         elif self.eval_type == consts.MULTY:
             precision_operator = MultiClassRecall()
-            return precision_operator.compute(labels, pred_scores, result_filter)
+            return precision_operator.compute(labels, pred_scores)
         else:
             logging.warning("error:can not find classification type:{}".format(self.eval_type))
 
@@ -547,9 +555,6 @@ class Evaluation(ModelBase):
         dict
             the key is threshold and the value is the accuracy of this threshold.
         """
-        if thresholds is None:
-            thresholds = self.thresholds
-
         if thresholds is None and self.eval_type == consts.BINARY:
             thresholds = list(set(pred_scores))
             thresholds.sort()
@@ -652,9 +657,9 @@ class Gain(object):
             label_type = ['0', '1']
             gain_type = []
             for lt in label_type:
-                lift = self.__compute_gain(labels, pred_scores_one_hot, pos_label=lt)
-                gain_type.append(lift)
-            gains.append(gains)
+                gain = self.__compute_gain(labels, pred_scores_one_hot, pos_label=lt)
+                gain_type.append(gain)
+            gains.append(gain_type)
 
         return gains, thresholds
 
@@ -675,12 +680,10 @@ class BiClassPrecision(object):
         return one_hot
 
     def compute(self, labels, pred_scores, thresholds):
-        if thresholds is None:
-            thresholds = [0.5]
         scores = []
         for threshold in thresholds:
             pred_scores_one_hot = self.__predict_value_to_one_hot(pred_scores, threshold)
-            score = precision_score(labels, pred_scores_one_hot, average=None)
+            score = list(precision_score(labels, pred_scores_one_hot, average=None))
             scores.append(score)
 
         return scores, thresholds
@@ -691,40 +694,8 @@ class MultiClassPrecision(object):
     Compute multi-classification precision
     """
 
-    def compute(self, labels, pred_scores, result_filter):
-        scores = precision_score(labels, pred_scores, average=None)
-
-        scores = scores.tolist()
-        label_type = []
-        for label in labels:
-            if label not in label_type:
-                label_type.append(label)
-
-        for pred_score in pred_scores:
-            if pred_score not in label_type:
-                label_type.append(pred_score)
-
-        label_type.sort()
-        if len(label_type) != len(scores):
-            logging.warning("label type size != scores size, exit")
-            return -1
-
-        label_key_pair = {}
-        for i in range(len(label_type)):
-            label_key_pair[label_type[i]] = i
-
-        ret_scores = {}
-        if result_filter is not None:
-            for rf in result_filter:
-                if rf in label_key_pair:
-                    ret_scores[rf] = scores[label_key_pair[rf]]
-                else:
-                    ret_scores[rf] = -1
-        else:
-            for label in label_key_pair:
-                ret_scores[label] = scores[label_key_pair[label]]
-
-        return ret_scores
+    def compute(self, labels, pred_scores):
+        return precision_score(labels, pred_scores, average=None)
 
 
 class BiClassRecall(object):
@@ -743,13 +714,11 @@ class BiClassRecall(object):
         return one_hot
 
     def compute(self, labels, pred_scores, thresholds):
-        if thresholds is None:
-            thresholds = [0.5]
         scores = []
 
         for threshold in thresholds:
             pred_scores_one_hot = self.__predict_value_to_one_hot(pred_scores, threshold)
-            score = recall_score(labels, pred_scores_one_hot, average=None)
+            score = list(recall_score(labels, pred_scores_one_hot, average=None))
             scores.append(score)
 
         return scores, thresholds
@@ -760,41 +729,8 @@ class MultiClassRecall(object):
     Compute multi-classification recall
     """
 
-    def compute(self, labels, pred_scores, result_filter=None):
-        scores = recall_score(labels, pred_scores, average=None)
-
-        scores = scores.tolist()
-        label_type = []
-        for label in labels:
-            if label not in label_type:
-                label_type.append(label)
-
-        for pred_score in pred_scores:
-            if pred_score not in label_type:
-                label_type.append(pred_score)
-
-        label_type.sort()
-
-        if len(label_type) != len(scores):
-            logging.warning("error:label type size != scores size, return -1 as result")
-            return -1
-
-        label_key_pair = {}
-        for i in range(len(label_type)):
-            label_key_pair[label_type[i]] = i
-
-        ret_scores = {}
-        if result_filter is not None:
-            for rf in result_filter:
-                if rf in label_key_pair:
-                    ret_scores[rf] = scores[label_key_pair[rf]]
-                else:
-                    ret_scores[rf] = -1
-        else:
-            for label in label_key_pair:
-                ret_scores[label] = scores[label_key_pair[label]]
-
-        return ret_scores
+    def compute(self, labels, pred_scores):
+        return recall_score(labels, pred_scores, average=None)
 
 
 class BiClassAccuracy(object):
@@ -813,8 +749,6 @@ class BiClassAccuracy(object):
         return one_hot
 
     def compute(self, labels, pred_scores, thresholds, normalize=True):
-        if thresholds is None:
-            thresholds = [0.5]
         scores = []
         for threshold in thresholds:
             pred_scores_one_hot = self.__predict_value_to_one_hot(pred_scores, threshold)
